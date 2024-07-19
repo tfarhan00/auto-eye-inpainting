@@ -16,7 +16,7 @@ eyeglass_cascade_path = os.path.join(
 )
 
 
-def detect_and_mask_eyes(image_bytes):
+def detect_and_mask_eyes(image_bytes, mask_type):
 
     npimg = np.frombuffer(image_bytes, np.uint8)
     image = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
@@ -43,6 +43,7 @@ def detect_and_mask_eyes(image_bytes):
     (fx, fy, fw, fh) = faces[0]
 
     roi_gray = gray[fy : fy + fh, fx : fx + fw]
+
     eyes = eye_cascade.detectMultiScale(
         roi_gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
     )
@@ -69,11 +70,9 @@ def detect_and_mask_eyes(image_bytes):
 
     y_offset = int((y_max - y_min) * 0.2)
 
-    head_center_x = fx + fw // 2
-
     head_x_offset = int(fw * 0.15)
 
-    top_left = (fx - head_x_offset, y_min - y_offset - 100)
+    top_left = (fx - head_x_offset, y_min - y_offset - 10)
     bottom_right = (fx + fw + head_x_offset, y_max + y_offset)
 
     top_left = (max(top_left[0], 0), max(top_left[1], 0))
@@ -82,24 +81,27 @@ def detect_and_mask_eyes(image_bytes):
         min(bottom_right[1], image.shape[0]),
     )
 
-    cv2.rectangle(mask, top_left, bottom_right, 255, -1)
-
-    image_with_line = image.copy()
-    cv2.line(
-        image_with_line,
-        (head_center_x, 0),
-        (head_center_x, image.shape[0]),
-        (0, 0, 255),
-        2,
-    )
+    final_mask = cv2.rectangle(mask, top_left, bottom_right, color=255, thickness=-1)
 
     # FOR DEV ONLY TO SHOW MASKING POSITION AND FACE CENTER
-    combined = cv2.addWeighted(
-        image_with_line, 0.5, cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR), 0.5, 0
-    )
 
-    # Convert the combined image to bytes
-    _, img_encoded = cv2.imencode(".png", mask)
+    if mask_type == "mask_and_guide":
+        head_center_x = fx + fw // 2
+
+        image_with_line = image.copy()
+        cv2.line(
+            image_with_line,
+            (head_center_x, 0),
+            (head_center_x, image.shape[0]),
+            (0, 0, 255),
+            2,
+        )
+
+        final_mask = cv2.addWeighted(
+            image_with_line, 0.5, cv2.cvtColor(final_mask, cv2.COLOR_GRAY2BGR), 0.5, 0
+        )
+
+    _, img_encoded = cv2.imencode(".png", final_mask)
     return io.BytesIO(img_encoded.tobytes())
 
 
